@@ -71,17 +71,6 @@ module "zones" {
   }
 }
 
-module "k8s_cluster" {
-  source = "./modules/k8s_cluster"
-  region = local.region
-  cluster_name = local.name
-  cluster_version = "1.27"
-  vpc_id = module.vpc.vpc_id
-  node_subnet_ids = module.vpc.private_subnets
-  control_plane_subnet_ids = module.vpc.public_subnets
-  tags = local.tags
-}
-
 # AppRepository	50e63d14-be19-4f65-b8c2-024dfba847b5	AWS::CodeCommit::Repository	CREATE_COMPLETE	-
 resource "aws_codecommit_repository" "app_repository" {
   repository_name = "${local.name}-app"
