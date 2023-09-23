@@ -116,64 +116,6 @@ resource "aws_cloudwatch_event_target" "cbvc_event_rule_target" {
   arn       = aws_lambda_function.lambda_cbvc.arn
 }
 
-# CodeBuildDFProject	container-devsecops-wksp-build-dockerfile	AWS::CodeBuild::Project	CREATE_COMPLETE	-
-resource "aws_codebuild_project" "codebuild_df_project" {
-  name          = "${var.name}-build-dockerfile"
-  service_role  = aws_iam_role.codebuild_role.arn
-  
-  environment {
-    compute_type                = "BUILD_GENERAL1_SMALL"
-    image                       = "aws/codebuild/docker:18.09.0"
-    type                        = "LINUX_CONTAINER"
-    privileged_mode             = true
-    
-    environment_variable {
-      name  = "AWS_ACCOUNT_ID"
-      type  = "PLAINTEXT"
-      value = data.aws_caller_identity.current.account_id
-    }
-  }
-  artifacts {
-    type = "CODEPIPELINE"
-  }
-  source {
-    type            = "CODEPIPELINE"
-    buildspec       = "buildspec_dockerfile.yml"
-  }
-}
-
-# CodeBuildPublishProject	container-devsecops-wksp-publish	AWS::CodeBuild::Project	CREATE_COMPLETE	-
-resource "aws_codebuild_project" "codebuild_publish_project" {
-  name          = "${var.name}-publish"
-  service_role  = aws_iam_role.codebuild_role.arn
-  
-  environment {
-    compute_type                = "BUILD_GENERAL1_SMALL"
-    image                       = "aws/codebuild/docker:18.09.0"
-    type                        = "LINUX_CONTAINER"
-    privileged_mode             = true
-    
-    environment_variable {
-      name  = "AWS_ACCOUNT_ID"
-      type  = "PLAINTEXT"
-      value = data.aws_caller_identity.current.account_id
-    }
-    
-    environment_variable {
-      name  = "IMAGE_REPO_NAME"
-      type  = "PLAINTEXT"
-      value = var.prod_image_repo_name
-    }
-  }
-  artifacts {
-    type = "CODEPIPELINE"
-  }
-  source {
-    type            = "CODEPIPELINE"
-    buildspec       = "buildspec_push.yml"
-  }
-}
-
 # CodeBuildRole	container-devsecops-wksp-codebuild-service 	AWS::IAM::Role	CREATE_COMPLETE	-
 resource "aws_iam_role" "codebuild_role" {
   name = "${var.name}-codebuild-service"
@@ -248,6 +190,64 @@ resource "aws_iam_role" "codebuild_role" {
   }
 }
 
+# CodeBuildDFProject	container-devsecops-wksp-build-dockerfile	AWS::CodeBuild::Project	CREATE_COMPLETE	-
+resource "aws_codebuild_project" "codebuild_df_project" {
+  name          = "${var.name}-build-dockerfile"
+  service_role  = aws_iam_role.codebuild_role.arn
+  
+  environment {
+    compute_type                = "BUILD_GENERAL1_SMALL"
+    image                       = "aws/codebuild/docker:18.09.0"
+    type                        = "LINUX_CONTAINER"
+    privileged_mode             = true
+    
+    environment_variable {
+      name  = "AWS_ACCOUNT_ID"
+      type  = "PLAINTEXT"
+      value = data.aws_caller_identity.current.account_id
+    }
+  }
+  artifacts {
+    type = "CODEPIPELINE"
+  }
+  source {
+    type            = "CODEPIPELINE"
+    buildspec       = "buildspec_dockerfile.yml"
+  }
+}
+
+# CodeBuildPublishProject	container-devsecops-wksp-publish	AWS::CodeBuild::Project	CREATE_COMPLETE	-
+resource "aws_codebuild_project" "codebuild_publish_project" {
+  name          = "${var.name}-publish"
+  service_role  = aws_iam_role.codebuild_role.arn
+  
+  environment {
+    compute_type                = "BUILD_GENERAL1_SMALL"
+    image                       = "aws/codebuild/docker:18.09.0"
+    type                        = "LINUX_CONTAINER"
+    privileged_mode             = true
+    
+    environment_variable {
+      name  = "AWS_ACCOUNT_ID"
+      type  = "PLAINTEXT"
+      value = data.aws_caller_identity.current.account_id
+    }
+    
+    environment_variable {
+      name  = "IMAGE_REPO_NAME"
+      type  = "PLAINTEXT"
+      value = var.prod_image_repo_name
+    }
+  }
+  artifacts {
+    type = "CODEPIPELINE"
+  }
+  source {
+    type            = "CODEPIPELINE"
+    buildspec       = "buildspec_push.yml"
+  }
+}
+
 # CodeBuildSecretsProject	container-devsecops-wksp-build-secrets	AWS::CodeBuild::Project	CREATE_COMPLETE	-
 resource "aws_codebuild_project" "codebuild_secrets_project" {
   name          = "${var.name}-build-secrets"
@@ -276,42 +276,6 @@ resource "aws_codebuild_project" "codebuild_secrets_project" {
   source {
     type            = "CODEPIPELINE"
     buildspec       = "buildspec_secrets.yml"
-  }
-}
-
-# CodeBuildHelmProject	container-devsecops-wksp-build-secrets	AWS::CodeBuild::Project	CREATE_COMPLETE	-
-resource "aws_codebuild_project" "codebuild_helm_project" {
-  name          = "${var.name}-deploy-helm"
-  service_role  = aws_iam_role.codebuild_role.arn
-  
-  environment {
-    compute_type                = "BUILD_GENERAL1_SMALL"
-    image                       = "aws/codebuild/docker:18.09.0"
-    type                        = "LINUX_CONTAINER"
-    privileged_mode             = true
-    
-    environment_variable {
-      name  = "AWS_ACCOUNT_ID"
-      type  = "PLAINTEXT"
-      value = data.aws_caller_identity.current.account_id
-    }
-    environment_variable {
-      name  = "IMAGE_REPO_NAME"
-      type  = "PLAINTEXT"
-      value = var.scratch_image_repo_name
-    }
-    environment_variable {
-      name  = "K8S_CLUSTER_NAME"
-      type  = "PLAINTEXT"
-      value = var.name
-    }
-  }
-  artifacts {
-    type = "CODEPIPELINE"
-  }
-  source {
-    type            = "CODEPIPELINE"
-    buildspec       = "buildspec_helm.yml"
   }
 }
 
@@ -406,22 +370,6 @@ resource "aws_codepipeline" "codepipeline" {
       }
     }
     
-    action {
-      name             = "HelmSource"
-      category         = "Source"
-      owner            = "AWS"
-      version          = "1"
-      provider         = "CodeCommit"
-      # namespace        = "SourceVariables"
-      output_artifacts = ["HelmSource"]
-      run_order        = 1
-
-      configuration = {
-        RepositoryName       = var.helm_repository_name
-        BranchName           = "main"
-        PollForSourceChanges = "false"
-      }
-    }
   }
   
   stage {
@@ -479,26 +427,6 @@ resource "aws_codepipeline" "codepipeline" {
 
       configuration = {
         ProjectName   = aws_codebuild_project.codebuild_vuln_project.name
-        PrimarySource = "ConfigSource"
-      }
-    }
-  }
-  
-  stage {
-    name = "DeployingToStaging"
-    
-    action {
-      name             = "StagingDeployment"
-      category         = "Build"
-      owner            = "AWS"
-      version          = "1"
-      provider         = "CodeBuild"
-      input_artifacts  = ["HelmSource"]
-      # output_artifacts = ["VulnAppSourceOutput","VulnConfigSourceOutput"]
-      run_order        = 1
-
-      configuration = {
-        ProjectName   = aws_codebuild_project.codebuild_helm_project.name
         PrimarySource = "ConfigSource"
       }
     }

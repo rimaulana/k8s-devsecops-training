@@ -85,7 +85,7 @@ module "eks" {
   
   eks_managed_node_group_defaults = {
     ami_type       = "AL2_x86_64"
-    instance_types = ["m5.large", "m5n.large", "m5zn.large"]
+    instance_types = ["t3a.large", "t3.large"]
 
     # We are using the IRSA created below for permissions
     # However, we have to deploy with the policy attached FIRST (when creating a fresh cluster)
@@ -100,12 +100,13 @@ module "eks" {
     infra_node_group = {
       # By default, the module creates a launch template to ensure tags are propagated to instances, etc.,
       # so we need to disable it to use the default template provided by the AWS EKS managed node group service
-      use_custom_launch_template = false
-      subnet_ids = var.node_subnet_ids
-      min_size     = 1
-      max_size     = 10
-      desired_size = 3
-      disk_size = 100
+      name                        = "infra"
+      use_custom_launch_template  = false
+      subnet_ids                  = var.node_subnet_ids
+      min_size                    = 1
+      max_size                    = 10
+      desired_size                = 3
+      disk_size                   = 100
       
       labels = {
         purpose = "infra"
@@ -390,10 +391,10 @@ resource "kubectl_manifest" "karpenter_provisioner" {
       requirements:
         - key: "karpenter.k8s.aws/instance-category"
           operator: In
-          values: ["c", "m"]
+          values: ["t"]
         - key: "karpenter.k8s.aws/instance-cpu"
           operator: In
-          values: ["8", "16", "32"]
+          values: ["4", "8",]
         - key: "karpenter.k8s.aws/instance-hypervisor"
           operator: In
           values: ["nitro"]

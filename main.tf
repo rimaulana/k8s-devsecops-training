@@ -96,12 +96,6 @@ resource "aws_codecommit_repository" "config_repository" {
   tags = local.tags
 }
 
-resource "aws_codecommit_repository" "helm_repository" {
-  repository_name = "${local.name}-helm"
-  description     = "This is the application helm repository to support the container devsecops workshop"
-  tags = local.tags
-}
-
 # ScratchRepository	container-devsecops-wksp-scratch 	AWS::ECR::Repository	CREATE_COMPLETE	-
 resource "aws_ecr_repository" "scratch_ecr_repository" {
   name                 = "scratch-${local.name}"
@@ -134,7 +128,6 @@ module pipeline {
   app_repository_name       = aws_codecommit_repository.app_repository.repository_name
   app_repo_clone_url        = aws_codecommit_repository.app_repository.clone_url_http
   config_repository_name    = aws_codecommit_repository.config_repository.repository_name
-  helm_repository_name      = aws_codecommit_repository.helm_repository.repository_name
   prod_image_repo_name      = aws_ecr_repository.prd_ecr_repository.name
   scratch_image_repo_name   = aws_ecr_repository.scratch_ecr_repository.name
   vulnerability_intolerance = "HIGH"

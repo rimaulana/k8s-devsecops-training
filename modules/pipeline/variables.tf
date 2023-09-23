@@ -23,11 +23,6 @@ variable config_repository_name {
   description = "The name of the Codebuild config CodeCommit Repo"
 }
 
-variable helm_repository_name {
-  type        = string
-  description = "The name of the APP Helm Repo"
-}
-
 variable prod_image_repo_name {
   type        = string
   description = "The name of ECR Repo for prod docker image"
