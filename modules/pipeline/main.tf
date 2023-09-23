@@ -373,10 +373,10 @@ resource "aws_codepipeline" "codepipeline" {
   }
   
   stage {
-    name = "StaticAnalysis-DockerfileConfiguration"
+    name = "StaticAnalysis-DockerfileConfiguration-Secrets"
     
     action {
-      name             = "Validation"
+      name             = "DockerfileValidation"
       category         = "Build"
       owner            = "AWS"
       version          = "1"
@@ -390,13 +390,9 @@ resource "aws_codepipeline" "codepipeline" {
         PrimarySource = "ConfigSource"
       }
     }
-  }
-  
-  stage {
-    name = "StaticAnalysis-Secrets"
     
     action {
-      name             = "Validation"
+      name             = "SecretsValidation"
       category         = "Build"
       owner            = "AWS"
       version          = "1"

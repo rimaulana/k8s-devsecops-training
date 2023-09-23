@@ -38,7 +38,7 @@ def handler(event, context):
   s3_prefix = 's3-{0}'.format(event['region']) if event['region'] != 'us-east-1' else 's3'
   if event['detail']['project-name'] in [vcproject]:
     # Add Errors
-    errors = '## Vulnerability Scanning (using Anchore)\n'
+    errors = '## Vulnerability Scanning (using ECR)\n'
     if event['detail']['build-status'] == 'SUCCEEDED':
       errors = errors + 'No vulnerabilities that meet or exceed the threshold!  You can review the findings in [ECR](%s).' % scan_result_url
     else:
