@@ -1,5 +1,34 @@
 data "aws_caller_identity" "current" {}
 
+# CBHMEventRule
+resource "aws_cloudwatch_event_rule" "cbhm_event_rule" {
+  name = "${var.name}-helm-deploy"
+  description = "Triggers when builds fail/pass in CodeBuild for Helm deployment."
+  event_pattern = jsonencode({
+    source = [
+      "aws.codebuild"
+    ]
+    detail-type = [
+      "CodeBuild Build State Change"
+    ]
+    detail = {
+      build-status = [
+        "FAILED",
+        "SUCCEEDED"
+      ]
+      project-name = [
+        aws_codebuild_project.codebuild_helm_project.name
+      ]
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "cbhm_event_rule_target" {
+  rule      = aws_cloudwatch_event_rule.cbhm_event_rule.name
+  target_id = "${var.name}-helm-deploy"
+  arn       = aws_lambda_function.lambda_cbhm.arn
+}
+
 # CBDFEventRule	container-devsecops-wksp-codebuild-dockerfile 	AWS::Events::Rule	CREATE_COMPLETE	-
 resource "aws_cloudwatch_event_rule" "cbdf_event_rule" {
   name = "${var.name}-codebuild-dockerfile"
@@ -190,6 +219,45 @@ resource "aws_iam_role" "codebuild_role" {
   }
 }
 
+# CodeBuildHelmProject	
+resource "aws_codebuild_project" "codebuild_helm_project" {
+  name          = "${var.name}-deploy-helm"
+  service_role  = aws_iam_role.codebuild_role.arn
+  
+  environment {
+    compute_type                = "BUILD_GENERAL1_SMALL"
+    image                       = "aws/codebuild/standard:5.0"
+    type                        = "LINUX_CONTAINER"
+    privileged_mode             = true
+    
+    environment_variable {
+      name  = "AWS_ACCOUNT_ID"
+      type  = "PLAINTEXT"
+      value = data.aws_caller_identity.current.account_id
+    }
+    
+    environment_variable {
+      name  = "K8S_CLUSTER_NAME"
+      type  = "PLAINTEXT"
+      value = var.name
+    }
+    
+    environment_variable {
+      name  = "IMAGE_REPO_NAME"
+      type  = "PLAINTEXT"
+      value = var.scratch_image_repo_name
+    }
+    
+  }
+  artifacts {
+    type = "CODEPIPELINE"
+  }
+  source {
+    type            = "CODEPIPELINE"
+    buildspec       = "buildspec_helm.yml"
+  }
+}
+
 # CodeBuildDFProject	container-devsecops-wksp-build-dockerfile	AWS::CodeBuild::Project	CREATE_COMPLETE	-
 resource "aws_codebuild_project" "codebuild_df_project" {
   name          = "${var.name}-build-dockerfile"
@@ -197,7 +265,7 @@ resource "aws_codebuild_project" "codebuild_df_project" {
   
   environment {
     compute_type                = "BUILD_GENERAL1_SMALL"
-    image                       = "aws/codebuild/docker:18.09.0"
+    image                       = "aws/codebuild/standard:5.0"
     type                        = "LINUX_CONTAINER"
     privileged_mode             = true
     
@@ -223,7 +291,7 @@ resource "aws_codebuild_project" "codebuild_publish_project" {
   
   environment {
     compute_type                = "BUILD_GENERAL1_SMALL"
-    image                       = "aws/codebuild/docker:18.09.0"
+    image                       = "aws/codebuild/standard:5.0"
     type                        = "LINUX_CONTAINER"
     privileged_mode             = true
     
@@ -255,7 +323,7 @@ resource "aws_codebuild_project" "codebuild_secrets_project" {
   
   environment {
     compute_type                = "BUILD_GENERAL1_SMALL"
-    image                       = "aws/codebuild/docker:18.09.0"
+    image                       = "aws/codebuild/standard:5.0"
     type                        = "LINUX_CONTAINER"
     privileged_mode             = true
     
@@ -370,13 +438,30 @@ resource "aws_codepipeline" "codepipeline" {
       }
     }
     
+    action {
+      name             = "HelmSource"
+      category         = "Source"
+      owner            = "AWS"
+      version          = "1"
+      provider         = "CodeCommit"
+      # namespace        = "SourceVariables"
+      output_artifacts = ["HelmSource"]
+      run_order        = 1
+
+      configuration = {
+        RepositoryName       = var.helm_repository_name
+        BranchName           = "main"
+        PollForSourceChanges = "false"
+      }
+    }
+    
   }
   
   stage {
-    name = "StaticAnalysis-DockerfileConfiguration"
+    name = "StaticAnalysis-DockerfileConfiguration-Secrets"
     
     action {
-      name             = "Validation"
+      name             = "DockerfileValidation"
       category         = "Build"
       owner            = "AWS"
       version          = "1"
@@ -390,13 +475,9 @@ resource "aws_codepipeline" "codepipeline" {
         PrimarySource = "ConfigSource"
       }
     }
-  }
-  
-  stage {
-    name = "StaticAnalysis-Secrets"
     
     action {
-      name             = "Validation"
+      name             = "SecretsValidation"
       category         = "Build"
       owner            = "AWS"
       version          = "1"
@@ -427,6 +508,25 @@ resource "aws_codepipeline" "codepipeline" {
 
       configuration = {
         ProjectName   = aws_codebuild_project.codebuild_vuln_project.name
+        PrimarySource = "ConfigSource"
+      }
+    }
+  }
+  
+  stage {
+    name = "DeployStageK8s"
+    
+    action {
+      name             = "DeployK8s"
+      category         = "Build"
+      owner            = "AWS"
+      version          = "1"
+      provider         = "CodeBuild"
+      input_artifacts  = ["AppSource","ConfigSource","HelmSource"]
+      run_order        = 1
+
+      configuration = {
+        ProjectName   = aws_codebuild_project.codebuild_helm_project.name
         PrimarySource = "ConfigSource"
       }
     }
@@ -515,6 +615,31 @@ resource "aws_iam_role" "codepipeline_role" {
       ]
     })
   }
+}
+
+# LambdaCBHM	
+data "archive_file" "lambda_cbhm_source_zip" {
+    type          = "zip"
+    source_file   = "${path.module}/lambda/lambda_cbhm.py"
+    output_path   = "${path.module}/lambda/lambda_cbhm.zip"
+}
+
+resource "aws_lambda_function" "lambda_cbhm" {
+  function_name = "${var.name}-helm-deploy"
+  description = "Adds a comment to the pull request regarding the success or failure of the deployment to k8s cluster."
+  handler = "lambda_cbhm.handler"
+  environment {
+    variables = {
+      PREFIX = var.name
+      CODEBUILDHMPROJECT = aws_codebuild_project.codebuild_helm_project.name
+    }
+  }
+  role = aws_iam_role.lambda_pr_comment_role.arn
+  runtime = "python3.9"
+  timeout = 35
+  memory_size = 128
+  filename = "${path.module}/lambda/lambda_cbhm.zip"
+  source_code_hash = data.archive_file.lambda_cbhm_source_zip.output_base64sha256
 }
 
 # LambdaCBDF	container-devsecops-wksp-codebuild-dockerfile 	AWS::Lambda::Function	CREATE_COMPLETE	-
@@ -693,49 +818,58 @@ resource "aws_iam_role" "lambda_pr_comment_role" {
   }
 }
 
+# PermissionForEventsToInvokeLambdaCBHM
+resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_cbhm" {
+  statement_id  = "PermissionForEventsToInvokeLambdaCBHM"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.lambda_cbhm.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.cbhm_event_rule.arn
+}
+
 # PermissionForEventsToInvokeLambdaCBDF	container-dso-wksp-InitialPipeline-G9XL65A8YN8D-PermissionForEventsToInvokeLambdaCBDF-hVqqBQypRncu	AWS::Lambda::Permission	CREATE_COMPLETE	-
 resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_cbdf" {
   statement_id  = "PermissionForEventsToInvokeLambdaCBDF"
   action        = "lambda:InvokeFunction"
-  function_name = "${var.name}-codebuild-dockerfile"
+  function_name = aws_lambda_function.lambda_cbdf.function_name
   principal     = "events.amazonaws.com"
-  source_arn = aws_cloudwatch_event_rule.cbdf_event_rule.arn
+  source_arn    = aws_cloudwatch_event_rule.cbdf_event_rule.arn
 }
 
 # PermissionForEventsToInvokeLambdaCBPU	container-dso-wksp-InitialPipeline-G9XL65A8YN8D-PermissionForEventsToInvokeLambdaCBPU-bWW4E1O85jpD	AWS::Lambda::Permission	CREATE_COMPLETE	-
 resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_cbpu" {
   statement_id  = "PermissionForEventsToInvokeLambdaCBPU"
   action        = "lambda:InvokeFunction"
-  function_name = "${var.name}-codebuild-publish"
+  function_name = aws_lambda_function.lambda_cbpu.function_name
   principal     = "events.amazonaws.com"
-  source_arn = aws_cloudwatch_event_rule.cbpu_event_rule.arn
+  source_arn    = aws_cloudwatch_event_rule.cbpu_event_rule.arn
 }
 
 # PermissionForEventsToInvokeLambdaCBSC	container-dso-wksp-InitialPipeline-G9XL65A8YN8D-PermissionForEventsToInvokeLambdaCBSC-kHunXJ5xo436	AWS::Lambda::Permission	CREATE_COMPLETE	-
 resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_cbsc" {
   statement_id  = "PermissionForEventsToInvokeLambdaCBSC"
   action        = "lambda:InvokeFunction"
-  function_name = "${var.name}-codebuild-secrets"
+  function_name = aws_lambda_function.lambda_cbsc.function_name
   principal     = "events.amazonaws.com"
-  source_arn = aws_cloudwatch_event_rule.cbsc_event_rule.arn
+  source_arn    = aws_cloudwatch_event_rule.cbsc_event_rule.arn
 }
 
 # PermissionForEventsToInvokeLambdaCBVC	container-dso-wksp-InitialPipeline-G9XL65A8YN8D-PermissionForEventsToInvokeLambdaCBVC-tGsAMQGE4Vfw	AWS::Lambda::Permission	CREATE_COMPLETE	-
 resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_cbvc" {
   statement_id  = "PermissionForEventsToInvokeLambdaCBVC"
   action        = "lambda:InvokeFunction"
-  function_name = "${var.name}-codebuild-vulnerability"
+  function_name = aws_lambda_function.lambda_cbvc.function_name
   principal     = "events.amazonaws.com"
-  source_arn = aws_cloudwatch_event_rule.cbvc_event_rule.arn
+  source_arn    = aws_cloudwatch_event_rule.cbvc_event_rule.arn
 }
 
 # PermissionForEventsToInvokeLambdaPR	container-dso-wksp-InitialPipeline-G9XL65A8YN8D-PermissionForEventsToInvokeLambdaPR-x7WbeHQQrQmX	AWS::Lambda::Permission	CREATE_COMPLETE	-
 resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_pr" {
   statement_id  = "PermissionForEventsToInvokeLambdaPR"
   action        = "lambda:InvokeFunction"
-  function_name = "${var.name}-pr"
+  function_name = aws_lambda_function.lambda_pr.function_name
   principal     = "events.amazonaws.com"
-  source_arn = aws_cloudwatch_event_rule.pr_event_rule.arn
+  source_arn    = aws_cloudwatch_event_rule.pr_event_rule.arn
 }
 
 # PipelineBucket	container-devsecops-wksp-460449571267-us-east-2-artifacts 	AWS::S3::Bucket	CREATE_COMPLETE	-

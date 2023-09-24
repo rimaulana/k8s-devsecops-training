@@ -81,6 +81,14 @@ module "eks" {
         "system:nodes",
       ]
     },
+     # We need to add in codebuild role arn for it to deploy app
+    {
+      rolearn  = var.codebuild_role_arn
+      username = "Codebuild"
+      groups = [
+        "system:masters",
+      ]
+    },
   ]
   
   eks_managed_node_group_defaults = {

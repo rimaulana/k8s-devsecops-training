@@ -32,3 +32,8 @@ variable "control_plane_subnet_ids" {
   description = "subnet ids for EKS control plane"
   type        = list(string)
 }
+
+variable "codebuild_role_arn" {
+  description = "role arn of codebuild project"
+  type        = string
+}
