@@ -197,7 +197,7 @@ resource "aws_codebuild_project" "codebuild_df_project" {
   
   environment {
     compute_type                = "BUILD_GENERAL1_SMALL"
-    image                       = "aws/codebuild/docker:18.09.0"
+    image                       = "aws/codebuild/standard:5.0"
     type                        = "LINUX_CONTAINER"
     privileged_mode             = true
     
@@ -223,7 +223,7 @@ resource "aws_codebuild_project" "codebuild_publish_project" {
   
   environment {
     compute_type                = "BUILD_GENERAL1_SMALL"
-    image                       = "aws/codebuild/docker:18.09.0"
+    image                       = "aws/codebuild/standard:5.0"
     type                        = "LINUX_CONTAINER"
     privileged_mode             = true
     
@@ -255,7 +255,7 @@ resource "aws_codebuild_project" "codebuild_secrets_project" {
   
   environment {
     compute_type                = "BUILD_GENERAL1_SMALL"
-    image                       = "aws/codebuild/docker:18.09.0"
+    image                       = "aws/codebuild/standard:5.0"
     type                        = "LINUX_CONTAINER"
     privileged_mode             = true
     
@@ -693,7 +693,7 @@ resource "aws_iam_role" "lambda_pr_comment_role" {
 resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_cbdf" {
   statement_id  = "PermissionForEventsToInvokeLambdaCBDF"
   action        = "lambda:InvokeFunction"
-  function_name = "${var.name}-codebuild-dockerfile"
+  function_name = aws_lambda_function.lambda_cbdf.function_name
   principal     = "events.amazonaws.com"
   source_arn = aws_cloudwatch_event_rule.cbdf_event_rule.arn
 }
@@ -702,7 +702,7 @@ resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_cbdf" {
 resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_cbpu" {
   statement_id  = "PermissionForEventsToInvokeLambdaCBPU"
   action        = "lambda:InvokeFunction"
-  function_name = "${var.name}-codebuild-publish"
+  function_name = aws_lambda_function.lambda_cbpu.function_name
   principal     = "events.amazonaws.com"
   source_arn = aws_cloudwatch_event_rule.cbpu_event_rule.arn
 }
@@ -711,7 +711,7 @@ resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_cbpu" {
 resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_cbsc" {
   statement_id  = "PermissionForEventsToInvokeLambdaCBSC"
   action        = "lambda:InvokeFunction"
-  function_name = "${var.name}-codebuild-secrets"
+  function_name = aws_lambda_function.lambda_cbsc.function_name
   principal     = "events.amazonaws.com"
   source_arn = aws_cloudwatch_event_rule.cbsc_event_rule.arn
 }
@@ -720,7 +720,7 @@ resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_cbsc" {
 resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_cbvc" {
   statement_id  = "PermissionForEventsToInvokeLambdaCBVC"
   action        = "lambda:InvokeFunction"
-  function_name = "${var.name}-codebuild-vulnerability"
+  function_name = aws_lambda_function.lambda_cbvc.function_name
   principal     = "events.amazonaws.com"
   source_arn = aws_cloudwatch_event_rule.cbvc_event_rule.arn
 }
@@ -729,7 +729,7 @@ resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_cbvc" {
 resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_pr" {
   statement_id  = "PermissionForEventsToInvokeLambdaPR"
   action        = "lambda:InvokeFunction"
-  function_name = "${var.name}-pr"
+  function_name = aws_lambda_function.lambda_pr.function_name
   principal     = "events.amazonaws.com"
   source_arn = aws_cloudwatch_event_rule.pr_event_rule.arn
 }
