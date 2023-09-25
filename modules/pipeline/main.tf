@@ -1,5 +1,92 @@
 data "aws_caller_identity" "current" {}
 
+# CBKSEventRule
+resource "aws_cloudwatch_event_rule" "cbks_event_rule" {
+  name = "${var.name}-kubesec-scan"
+  description = "Triggers when builds fail/pass in CodeBuild for kubesec scan."
+  event_pattern = jsonencode({
+    source = [
+      "aws.codebuild"
+    ]
+    detail-type = [
+      "CodeBuild Build State Change"
+    ]
+    detail = {
+      build-status = [
+        "FAILED",
+        "SUCCEEDED"
+      ]
+      project-name = [
+        aws_codebuild_project.codebuild_kubesec_project.name
+      ]
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "cbks_event_rule_target" {
+  rule      = aws_cloudwatch_event_rule.cbks_event_rule.name
+  target_id = "${var.name}-kubesec-scan"
+  arn       = aws_lambda_function.lambda_cbks.arn
+}
+
+# CBSOEventRule
+resource "aws_cloudwatch_event_rule" "cbso_event_rule" {
+  name = "${var.name}-sonar-scan"
+  description = "Triggers when builds fail/pass in CodeBuild for SonarQube scan."
+  event_pattern = jsonencode({
+    source = [
+      "aws.codebuild"
+    ]
+    detail-type = [
+      "CodeBuild Build State Change"
+    ]
+    detail = {
+      build-status = [
+        "FAILED",
+        "SUCCEEDED"
+      ]
+      project-name = [
+        aws_codebuild_project.codebuild_sonar_project.name
+      ]
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "cbso_event_rule_target" {
+  rule      = aws_cloudwatch_event_rule.cbso_event_rule.name
+  target_id = "${var.name}-sonar-scan"
+  arn       = aws_lambda_function.lambda_cbso.arn
+}
+
+# CBZPEventRule
+resource "aws_cloudwatch_event_rule" "cbzp_event_rule" {
+  name = "${var.name}-zap-scan"
+  description = "Triggers when builds fail/pass in CodeBuild for ZAP scan."
+  event_pattern = jsonencode({
+    source = [
+      "aws.codebuild"
+    ]
+    detail-type = [
+      "CodeBuild Build State Change"
+    ]
+    detail = {
+      build-status = [
+        "FAILED",
+        "SUCCEEDED"
+      ]
+      project-name = [
+        aws_codebuild_project.codebuild_zap_project.name
+      ]
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "cbzp_event_rule_target" {
+  rule      = aws_cloudwatch_event_rule.cbzp_event_rule.name
+  target_id = "${var.name}-zap-scan"
+  arn       = aws_lambda_function.lambda_cbzp.arn
+}
+
 # CBHMEventRule
 resource "aws_cloudwatch_event_rule" "cbhm_event_rule" {
   name = "${var.name}-helm-deploy"
@@ -163,6 +250,41 @@ resource "aws_iam_role" "codebuild_role" {
     ]
   })
   path = "/"
+  
+  inline_policy {
+    name = "VPCConfig"
+    policy = jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Effect = "Allow"
+          Action = [
+            "ec2:CreateNetworkInterface",
+            "ec2:DescribeDhcpOptions",
+            "ec2:DescribeNetworkInterfaces",
+            "ec2:DeleteNetworkInterface",
+            "ec2:DescribeSubnets",
+            "ec2:DescribeSecurityGroups",
+            "ec2:DescribeVpcs"
+          ]
+          Resource = "*"
+        },
+        {
+          Effect = "Allow"
+          Action = [
+            "ec2:CreateNetworkInterfacePermission"
+          ]
+          Resource = "arn:aws:ec2:${var.region}:${data.aws_caller_identity.current.account_id}:network-interface/*"
+          Condition = {
+            StringEquals = {
+              "ec2:AuthorizedService" = "codebuild.amazonaws.com"
+            }
+          }
+        }
+      ]
+    })
+  }
+  
   inline_policy {
     name = "ServicePolicy"
     policy = jsonencode({
@@ -216,6 +338,103 @@ resource "aws_iam_role" "codebuild_role" {
         }
       ]
     })
+  }
+}
+
+# CodeBuildKubesecProject	
+resource "aws_codebuild_project" "codebuild_kubesec_project" {
+  name          = "${var.name}-kubesec-scan"
+  service_role  = aws_iam_role.codebuild_role.arn
+  
+  environment {
+    compute_type                = "BUILD_GENERAL1_SMALL"
+    image                       = "aws/codebuild/standard:5.0"
+    type                        = "LINUX_CONTAINER"
+    privileged_mode             = true
+    
+    environment_variable {
+      name  = "AWS_ACCOUNT_ID"
+      type  = "PLAINTEXT"
+      value = data.aws_caller_identity.current.account_id
+    }
+    
+  }
+  artifacts {
+    type = "CODEPIPELINE"
+  }
+  source {
+    type            = "CODEPIPELINE"
+    buildspec       = "buildspec_kubesec.yml"
+  }
+}
+
+# CodeBuildSonarProject	
+resource "aws_codebuild_project" "codebuild_sonar_project" {
+  name          = "${var.name}-sonar-scan"
+  service_role  = aws_iam_role.codebuild_role.arn
+  
+  environment {
+    compute_type                = "BUILD_GENERAL1_SMALL"
+    image                       = "aws/codebuild/standard:5.0"
+    type                        = "LINUX_CONTAINER"
+    privileged_mode             = true
+    
+    environment_variable {
+      name  = "AWS_ACCOUNT_ID"
+      type  = "PLAINTEXT"
+      value = data.aws_caller_identity.current.account_id
+    }
+    
+  }
+  artifacts {
+    type = "CODEPIPELINE"
+  }
+  source {
+    type            = "CODEPIPELINE"
+    buildspec       = "buildspec_sonar.yml"
+  }
+  vpc_config {
+    vpc_id             = var.vpc_id
+    subnets            = var.codebuild_subnet_ids
+    security_group_ids = [aws_security_group.codebuild_security_group.id]
+  }
+}
+
+# CodeBuildZAPProject	
+resource "aws_codebuild_project" "codebuild_zap_project" {
+  name          = "${var.name}-zap-scan"
+  service_role  = aws_iam_role.codebuild_role.arn
+  
+  environment {
+    compute_type                = "BUILD_GENERAL1_SMALL"
+    image                       = "aws/codebuild/standard:5.0"
+    type                        = "LINUX_CONTAINER"
+    privileged_mode             = true
+    
+    environment_variable {
+      name  = "AWS_ACCOUNT_ID"
+      type  = "PLAINTEXT"
+      value = data.aws_caller_identity.current.account_id
+    }
+    
+    environment_variable {
+      name  = "K8S_CLUSTER_NAME"
+      type  = "PLAINTEXT"
+      value = var.name
+    }
+    
+  }
+  artifacts {
+    type = "CODEPIPELINE"
+  }
+  source {
+    type            = "CODEPIPELINE"
+    buildspec       = "buildspec_zap.yml"
+  }
+  vpc_config {
+    vpc_id             = var.vpc_id
+    subnets            = var.codebuild_subnet_ids
+    security_group_ids = [aws_security_group.codebuild_security_group.id]
   }
 }
 
@@ -491,6 +710,36 @@ resource "aws_codepipeline" "codepipeline" {
         PrimarySource = "ConfigSource"
       }
     }
+    
+    action {
+      name             = "ManifestValidation"
+      category         = "Build"
+      owner            = "AWS"
+      version          = "1"
+      provider         = "CodeBuild"
+      input_artifacts  = ["AppSource","ConfigSource","HelmSource"]
+      run_order        = 1
+
+      configuration = {
+        ProjectName   = aws_codebuild_project.codebuild_kubesec_project.name
+        PrimarySource = "ConfigSource"
+      }
+    }
+    
+    action {
+      name             = "SonarScan"
+      category         = "Build"
+      owner            = "AWS"
+      version          = "1"
+      provider         = "CodeBuild"
+      input_artifacts  = ["AppSource","ConfigSource"]
+      run_order        = 1
+
+      configuration = {
+        ProjectName   = aws_codebuild_project.codebuild_sonar_project.name
+        PrimarySource = "ConfigSource"
+      }
+    }
   }
   
   stage {
@@ -527,6 +776,25 @@ resource "aws_codepipeline" "codepipeline" {
 
       configuration = {
         ProjectName   = aws_codebuild_project.codebuild_helm_project.name
+        PrimarySource = "ConfigSource"
+      }
+    }
+  }
+  
+  stage {
+    name = "ZAPScan"
+    
+    action {
+      name             = "ZAPScan"
+      category         = "Build"
+      owner            = "AWS"
+      version          = "1"
+      provider         = "CodeBuild"
+      input_artifacts  = ["AppSource","ConfigSource","HelmSource"]
+      run_order        = 1
+
+      configuration = {
+        ProjectName   = aws_codebuild_project.codebuild_zap_project.name
         PrimarySource = "ConfigSource"
       }
     }
@@ -615,6 +883,81 @@ resource "aws_iam_role" "codepipeline_role" {
       ]
     })
   }
+}
+
+# LambdaCBKS	
+data "archive_file" "lambda_cbks_source_zip" {
+    type          = "zip"
+    source_file   = "${path.module}/lambda/lambda_cbks.py"
+    output_path   = "${path.module}/lambda/lambda_cbks.zip"
+}
+
+resource "aws_lambda_function" "lambda_cbks" {
+  function_name = "${var.name}-kubesec-scan"
+  description = "Adds a comment to the pull request regarding the success or failure of manifest scan by kubesec"
+  handler = "lambda_cbks.handler"
+  environment {
+    variables = {
+      PREFIX = var.name
+      CODEBUILDKSPROJECT = aws_codebuild_project.codebuild_kubesec_project.name
+    }
+  }
+  role = aws_iam_role.lambda_pr_comment_role.arn
+  runtime = "python3.9"
+  timeout = 35
+  memory_size = 128
+  filename = "${path.module}/lambda/lambda_cbks.zip"
+  source_code_hash = data.archive_file.lambda_cbks_source_zip.output_base64sha256
+}
+
+# LambdaCBSO	
+data "archive_file" "lambda_cbso_source_zip" {
+    type          = "zip"
+    source_file   = "${path.module}/lambda/lambda_cbso.py"
+    output_path   = "${path.module}/lambda/lambda_cbso.zip"
+}
+
+resource "aws_lambda_function" "lambda_cbso" {
+  function_name = "${var.name}-sonar-scan"
+  description = "Adds a comment to the pull request regarding the success or failure of SonarQube scan."
+  handler = "lambda_cbso.handler"
+  environment {
+    variables = {
+      PREFIX = var.name
+      CODEBUILDSOPROJECT = aws_codebuild_project.codebuild_sonar_project.name
+    }
+  }
+  role = aws_iam_role.lambda_pr_comment_role.arn
+  runtime = "python3.9"
+  timeout = 35
+  memory_size = 128
+  filename = "${path.module}/lambda/lambda_cbso.zip"
+  source_code_hash = data.archive_file.lambda_cbso_source_zip.output_base64sha256
+}
+
+# LambdaCBZP	
+data "archive_file" "lambda_cbzp_source_zip" {
+    type          = "zip"
+    source_file   = "${path.module}/lambda/lambda_cbzp.py"
+    output_path   = "${path.module}/lambda/lambda_cbzp.zip"
+}
+
+resource "aws_lambda_function" "lambda_cbzp" {
+  function_name = "${var.name}-zap-scan"
+  description = "Adds a comment to the pull request regarding the success or failure of ZAP scan."
+  handler = "lambda_cbzp.handler"
+  environment {
+    variables = {
+      PREFIX = var.name
+      CODEBUILDZPPROJECT = aws_codebuild_project.codebuild_zap_project.name
+    }
+  }
+  role = aws_iam_role.lambda_pr_comment_role.arn
+  runtime = "python3.9"
+  timeout = 35
+  memory_size = 128
+  filename = "${path.module}/lambda/lambda_cbzp.zip"
+  source_code_hash = data.archive_file.lambda_cbzp_source_zip.output_base64sha256
 }
 
 # LambdaCBHM	
@@ -818,6 +1161,33 @@ resource "aws_iam_role" "lambda_pr_comment_role" {
   }
 }
 
+# PermissionForEventsToInvokeLambdaCBZP
+resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_cbzp" {
+  statement_id  = "PermissionForEventsToInvokeLambdaCBZP"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.lambda_cbzp.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.cbzp_event_rule.arn
+}
+
+# PermissionForEventsToInvokeLambdaCBKS
+resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_cbks" {
+  statement_id  = "PermissionForEventsToInvokeLambdaCBKS"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.lambda_cbks.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.cbks_event_rule.arn
+}
+
+# PermissionForEventsToInvokeLambdaCBSO
+resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_cbso" {
+  statement_id  = "PermissionForEventsToInvokeLambdaCBSO"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.lambda_cbso.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.cbso_event_rule.arn
+}
+
 # PermissionForEventsToInvokeLambdaCBHM
 resource "aws_lambda_permission" "permission_for_event_to_invoke_lambda_cbhm" {
   statement_id  = "PermissionForEventsToInvokeLambdaCBHM"
@@ -961,6 +1331,21 @@ resource "aws_iam_role" "pr_event_rule_role" {
   }
 }
 
+resource "aws_security_group" "codebuild_security_group" {
+  name        = "${var.name}-codebuild-sg"
+  description = "Security group for Codebuild project"
+  vpc_id      = var.vpc_id
+  
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+
+  tags = var.tags
+}
 # # CloudTrail
 # resource "aws_s3_bucket" "trail_bucket" {
 #   bucket = "${var.name}-trailbucket-${data.aws_caller_identity.current.account_id}"

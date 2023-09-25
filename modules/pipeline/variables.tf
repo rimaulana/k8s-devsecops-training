@@ -43,6 +43,16 @@ variable app_repo_clone_url {
   description = "The clone HTTP URL of APP repo"
 }
 
+variable vpc_id {
+  type        = string
+  description = "The VPC ID"
+}
+
+variable codebuild_subnet_ids {
+  description = "subnet ids for codebuild project"
+  type        = list(string)
+}
+
 variable vulnerability_intolerance {
   type        = string
   description = "The clone HTTP URL of APP repo"

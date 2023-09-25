@@ -141,5 +141,7 @@ module pipeline {
   scratch_image_repo_name   = aws_ecr_repository.scratch_ecr_repository.name
   vulnerability_intolerance = "HIGH"
   lambda_security_hub_arn   = aws_ecr_repository.prd_ecr_repository.arn
+  vpc_id                    = module.vpc.vpc_id
+  codebuild_subnet_ids      = module.vpc.private_subnets
   tags                      = local.tags
 }
