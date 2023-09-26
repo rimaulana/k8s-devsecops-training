@@ -1,5 +1,29 @@
 data "aws_caller_identity" "current" {}
 
+resource "aws_ssm_parameter" "sonar_token" {
+  name  = "${var.name}-sonar-token"
+  type  = "SecureString"
+  value = "sonar-initial-token"
+}
+
+resource "aws_ssm_parameter" "sonar_url" {
+  name  = "${var.name}-sonar-url"
+  type  = "SecureString"
+  value = "sonar-initial-url"
+}
+
+resource "aws_ssm_parameter" "zap_token" {
+  name  = "${var.name}-zap-token"
+  type  = "SecureString"
+  value = "zap-initial-token"
+}
+
+resource "aws_ssm_parameter" "zap_url" {
+  name  = "${var.name}-zap-url"
+  type  = "SecureString"
+  value = "zap-initial-url"
+}
+
 # CBKSEventRule
 resource "aws_cloudwatch_event_rule" "cbks_event_rule" {
   name = "${var.name}-kubesec-scan"
@@ -286,6 +310,22 @@ resource "aws_iam_role" "codebuild_role" {
   }
   
   inline_policy {
+    name = "LambdaInvoke"
+    policy = jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Effect = "Allow"
+          Action = [
+            "lambda:InvokeFunction"
+          ]
+          Resource = aws_lambda_function.lambda_security_hub_import.arn
+        }
+      ]
+    })
+  }
+  
+  inline_policy {
     name = "ServicePolicy"
     policy = jsonencode({
       Version = "2012-10-17"
@@ -335,6 +375,15 @@ resource "aws_iam_role" "codebuild_role" {
             "eks:DescribeCluster"
           ]
           Resource = "*"
+        },
+        {
+          Effect = "Allow"
+          Action = [
+            "kms:Decrypt",
+            "kms:Encrypt",
+            "kms:GenerateDataKey"
+          ]
+          Resource = "arn:aws:kms:${var.region}:${data.aws_caller_identity.current.account_id}:alias/aws/ssm"
         }
       ]
     })
@@ -385,6 +434,18 @@ resource "aws_codebuild_project" "codebuild_sonar_project" {
       value = data.aws_caller_identity.current.account_id
     }
     
+    environment_variable {
+      name = "SONAR_TOKEN"
+      type = "PARAMETER_STORE"
+      value = aws_ssm_parameter.sonar_token.name
+    }
+  
+    environment_variable {
+      name = "SONAR_URL"
+      type = "PARAMETER_STORE"
+      value = aws_ssm_parameter.sonar_url.name
+    }
+    
   }
   artifacts {
     type = "CODEPIPELINE"
@@ -423,6 +484,23 @@ resource "aws_codebuild_project" "codebuild_zap_project" {
       value = var.name
     }
     
+    environment_variable {
+      name = "ZAP_TOKEN"
+      type = "PARAMETER_STORE"
+      value = aws_ssm_parameter.zap_token.name
+    }
+  
+    environment_variable {
+      name = "ZAP_URL"
+      type = "PARAMETER_STORE"
+      value = aws_ssm_parameter.zap_url.name
+    }
+    
+    environment_variable {
+      name = "LAMBDA_SECHUB_NAME"
+      type = "PLAINTEXT"
+      value = aws_lambda_function.lambda_security_hub_import.function_name
+    }
   }
   artifacts {
     type = "CODEPIPELINE"
@@ -1346,6 +1424,70 @@ resource "aws_security_group" "codebuild_security_group" {
 
   tags = var.tags
 }
+
+resource "aws_iam_role" "lambda_security_hub_import_role" {
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = [
+            "lambda.amazonaws.com"
+          ]
+        }
+        Action = [
+          "sts:AssumeRole"
+        ]
+      }
+    ]
+  })
+  path = "/"
+  inline_policy {
+    name = "lambda-execution-policy"
+    policy = jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Effect = "Allow"
+          Action = [
+            "logs:CreateLogGroup",
+            "logs:CreateLogStream",
+            "logs:PutLogEvents",
+            "securityhub:*"
+          ]
+          Resource = "*"
+        }
+      ]
+    })
+  }
+}
+
+data "archive_file" "lambda_sechub_source_zip" {
+    type          = "zip"
+    source_file   = "${path.module}/lambda/lambda_sechub.py"
+    output_path   = "${path.module}/lambda/lambda_sechub.zip"
+}
+
+resource "aws_lambda_function" "lambda_security_hub_import" {
+  function_name = "${var.name}-import-to-securityhub"
+  handler = "lambda_sechub.handler"
+  role = aws_iam_role.lambda_security_hub_import_role.arn
+  runtime = "python3.8"
+  environment {
+    variables = {
+      AWS_ACCOUNT_ID = data.aws_caller_identity.current.account_id
+    }
+  }
+  timeout = 35
+  memory_size = 128
+  filename = "${path.module}/lambda/lambda_sechub.zip"
+  source_code_hash = data.archive_file.lambda_sechub_source_zip.output_base64sha256
+  tags = var.tags
+}
+
+resource "aws_securityhub_account" "security_hub_setting" {}
+
 # # CloudTrail
 # resource "aws_s3_bucket" "trail_bucket" {
 #   bucket = "${var.name}-trailbucket-${data.aws_caller_identity.current.account_id}"

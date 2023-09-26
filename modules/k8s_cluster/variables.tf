@@ -37,3 +37,8 @@ variable "codebuild_role_arn" {
   description = "role arn of codebuild project"
   type        = string
 }
+
+variable "codebuild_security_group" {
+  description = "security group of codebuild project"
+  type        = string
+}

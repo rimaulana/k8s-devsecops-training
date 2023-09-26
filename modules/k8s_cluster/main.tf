@@ -70,6 +70,18 @@ module "eks" {
   control_plane_subnet_ids = var.control_plane_subnet_ids
   subnet_ids = var.node_subnet_ids
   
+  cluster_security_group_additional_rules = {
+    # Test: https://github.com/terraform-aws-modules/terraform-aws-eks/pull/2319
+    ingress_source_security_group_id = {
+      description              = "Ingress from Codebuild security group"
+      protocol                 = "tcp"
+      from_port                = 443
+      to_port                  = 443
+      type                     = "ingress"
+      source_security_group_id = var.codebuild_security_group
+    }
+  }
+  
   manage_aws_auth_configmap = true
   aws_auth_roles = [
     # We need to add in the Karpenter node IAM role for nodes launched by Karpenter
@@ -268,6 +280,8 @@ module "eks_blueprints_addons" {
             ingressClassName: "nginx"
             hosts:
             - name: "sonarqube.devsecops-training.com"
+          persistence:
+            enabled: true
         EOT
       ]
     }
@@ -279,9 +293,10 @@ module "eks_blueprints_addons" {
           controller:
             service:
               annotations:
-                service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+                service.beta.kubernetes.io/aws-load-balancer-scheme: "internal"
                 service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
                 service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+                service.beta.kubernetes.io/aws-load-balancer-type: "external"
         EOT
       ]
   }

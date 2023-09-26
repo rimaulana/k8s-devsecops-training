@@ -80,6 +80,7 @@ module "k8s_cluster" {
   node_subnet_ids           = module.vpc.private_subnets
   control_plane_subnet_ids  = module.vpc.public_subnets
   codebuild_role_arn        = module.pipeline.codebuild_role_arn
+  codebuild_security_group  = module.pipeline.codebuild_security_group
   tags                      = local.tags
 }
 
