@@ -1,0 +1,8 @@
+ignored: 
+- DL3000 
+- DL3025 
+
+trustedRegistries: 
+- http://hub.docker.com/
+- docker.io
+- public.ecr.aws

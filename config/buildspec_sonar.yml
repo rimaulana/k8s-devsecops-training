@@ -1,0 +1,35 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.7
+  pre_build:
+    commands:
+      - echo Pulling image
+      - docker pull public.ecr.aws/rimaulana/sonar-scanner-cli:v5.0.1
+      - pip install coverage
+      - pip install pytest
+      - pip install -r $CODEBUILD_SRC_DIR_AppSource/requirements.txt
+      - cd $CODEBUILD_SRC_DIR_AppSource && coverage run -m pytest
+      - cd $CODEBUILD_SRC_DIR_AppSource && coverage xml
+  build:
+    commands:
+      - aws ssm put-parameter --name "codebuild-sonar-link" --type "String" --value "$SONAR_URL/dashboard?id=$SONAR_PROJECT_KEY" --overwrite
+      - |
+        docker run \
+            --rm \
+            -e SONAR_HOST_URL="$SONAR_URL" \
+            -e SONAR_SCANNER_OPTS="-Dsonar.projectKey=$SONAR_PROJECT_KEY -Dsonar.python.version=3.7 -Dsonar.qualitygate.wait=true -Dsonar.token=$SONAR_TOKEN -Dsonar.python.coverage.reportPaths=coverage.xml" \
+            -v "$CODEBUILD_SRC_DIR_AppSource:/usr/src" \
+            public.ecr.aws/rimaulana/sonar-scanner-cli:v5.0.1 > scanreport.txt
+  post_build:
+    commands:
+      - SCAN_STATUS=$(cat scanreport.txt | grep "QUALITY GATE STATUS:" | awk '{print $5}')
+      - cat scanreport.txt
+      - |
+        if [ "$SCAN_STATUS" != "PASSED" ]; then
+          echo "SonarQube task $SCAN_STATUS";
+          exit 1;
+        fi
+      - echo Build completed on `date`

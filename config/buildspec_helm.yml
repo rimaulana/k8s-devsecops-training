@@ -1,0 +1,39 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      # - apt-get update && apt-get install -y python-dev jq
+      # - curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py  
+      # - python get-pip.py
+      # - pip install awscli --upgrade
+      - echo Installing Helm
+      # - curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+      - chmod 700 get_helm.sh
+      - ./get_helm.sh --version v3.12.3
+      - echo Installing kubectl
+      - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+      - sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+      - echo Updating kubeconfig
+      - aws eks update-kubeconfig --name $K8S_CLUSTER_NAME --region $AWS_DEFAULT_REGION
+      - IMAGE_TAG=`aws ssm get-parameter --name "destinationCommit" --query "Parameter.Value" --output text`
+  build:
+    commands:
+      - NAMESPACE=$IMAGE_TAG
+      - RELEASE_NAME=python-app
+      - helm upgrade -i $RELEASE_NAME $CODEBUILD_SRC_DIR_HelmSource/app/ -n $NAMESPACE --create-namespace --set image.repository=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME --set image.tag=$IMAGE_TAG
+      - REV=$(helm list -n $NAMESPACE | grep $RELEASE_NAME | awk '{print $3}')
+      - REPLICA=$(cat $CODEBUILD_SRC_DIR_HelmSource/app/values.yaml | awk '/replicaCount:/ {print $2}' )
+      - |
+        stat=0
+        while true
+        do
+          count=$(kubectl get pods -n $NAMESPACE -l release=$RELEASE_NAME,rev=$REV | grep Running | wc -l)
+          if [ "$count" -eq "$REPLICA" ]; then echo "New deployment succeed" && break; fi
+          if [ "$stat" -gt "36" ]; then echo "New deployment failed to be healthy, rolling back to previous version" && exit 1; fi
+          stat=$((stat+1))
+          sleep 5
+        done
+  post_build:
+    commands:
+      - echo Build completed on `date`

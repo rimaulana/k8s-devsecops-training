@@ -1,0 +1,4 @@
+flask
+flask-cors <= 3.0.8
+Flask-WTF <= 1.1.1
+gunicorn <= 21.2.0

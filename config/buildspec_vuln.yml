@@ -1,0 +1,39 @@
+version: 0.2
+
+phases: 
+  pre_build: 
+    commands:
+      # - apt-get update && apt-get install -y python-dev jq
+      # - curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py  
+      # - python get-pip.py
+      # - pip install awscli
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - IMAGE_TAG=`aws ssm get-parameter --name "destinationCommit" --query "Parameter.Value" --output text`
+  build: 
+    commands:
+      - IMAGE=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG
+      - docker build $CODEBUILD_SRC_DIR_AppSource -t $IMAGE
+      - docker push $IMAGE
+  post_build:
+    commands:
+      - aws ecr start-image-scan --repository-name $IMAGE_REPO_NAME --image-id imageTag=$IMAGE_TAG
+      - sleep 5
+      - |
+        while true
+        do
+          stat=$(aws ecr describe-images --repository-name $IMAGE_REPO_NAME --image-ids imageTag=$IMAGE_TAG --query imageDetails[0].imageScanStatus.status --output text)
+          if [ "$stat" = "COMPLETE" ]; then break; fi
+          sleep 5
+        done
+      - aws ecr describe-image-scan-findings --repository-name $IMAGE_REPO_NAME --image-id imageTag=$IMAGE_TAG > scan_results.json
+      - IMAGE_SHA=$(cat scan_results.json | jq -r '.imageId.imageDigest')
+      - aws ssm put-parameter --name "imageSHA" --type "String" --value "$IMAGE_SHA" --overwrite
+      - |
+        stat=0;
+        for Item in CRITICAL HIGH MEDIUM LOW INFORMATION UNDEFINED;
+          do
+            cat scan_results.json |  jq -r --arg threshold $Item '.imageScanFindings.findings[] | select(.severity==$threshold)'
+            if cat scan_results.json |  jq -r --arg threshold $Item '.imageScanFindings.findings[] | (.severity==$threshold)' | grep -q true; then stat=$((stat+1)); fi
+            if [ "$Item" = "$FAIL_WHEN" ]; then break; fi
+          done
+        if [ "$stat" -gt "0" ]; then echo "Vulnerabilties Found" && exit 1; fi

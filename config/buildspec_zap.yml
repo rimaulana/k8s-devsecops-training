@@ -1,0 +1,63 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo prebuild
+      - echo Installing kubectl
+      - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+      - sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+      - echo Updating kubeconfig
+      - aws eks update-kubeconfig --name $K8S_CLUSTER_NAME --region $AWS_DEFAULT_REGION
+      - NAMESPACE=`aws ssm get-parameter --name "destinationCommit" --query "Parameter.Value" --output text`
+      - BASE_APP_URL=`kubectl get ingress -n $NAMESPACE python-app-webapp --no-headers | awk '{print $3}'`
+      - APP_URL="http://$BASE_APP_URL"
+  build:
+    commands:
+      - echo "Spider"
+      - spider=$(curl -s "$ZAP_URL/JSON/spider/action/scan/?apikey=$ZAP_TOKEN&url=$APP_URL&contextName=&recurse=" | jq -r '.scan')
+      - |
+        stat=50;
+        while [ "$stat" != 100 ]; do
+          stat=$(curl -s "$ZAP_URL/JSON/spider/view/status/?apikey=$ZAP_TOKEN&scanId=$spider" | jq -r '.status');
+          echo "ZAP spider status is $stat";
+          sleep 5;
+        done
+      - echo "Ajax Spider"
+      - curl -s "$ZAP_URL/JSON/ajaxSpider/action/scan/?apikey=$ZAP_TOKEN&url=$APP_URL&inScope=&contextName=&subtreeOnly="
+      - |
+        stat="running"
+        while [ "$stat" != "stopped" ]; do
+          stat=$(curl -s "$ZAP_URL/JSON/ajaxSpider/view/status/?apikey=$ZAP_TOKEN" | jq -r '.status');
+          echo "ZAP Ajax spider status is $stat";
+          sleep 5;
+        done
+      - echo "ZAP Active scan started"
+      - scanid=$(curl -s "$ZAP_URL/JSON/ascan/action/scan/?apikey=$ZAP_TOKEN&url=$APP_URL&recurse=true&inScopeOnly=&scanPolicyName=&method=&postData=&contextId=" | jq -r '.scan')
+      - |
+        stat=50;
+        while [ "$stat" != 100 ]; do
+          stat=$(curl -s "$ZAP_URL/JSON/ascan/view/status/?apikey=$ZAP_TOKEN&scanId=$scanid" | jq -r '.status');
+          echo "OWASP ZAP scan status is $stat"
+          echo "OWASP Zap analysis status is in progress...";
+          sleep 5;
+        done
+        echo "OWASP Zap analysis status is completed..."; 
+      - high_alerts=$( curl -s "$ZAP_URL/JSON/alert/view/alertsSummary/?apikey=$ZAP_TOKEN&baseurl=$APP_URL" | jq -r '.alertsSummary.High')
+      - medium_alerts=$( curl -s "$ZAP_URL/JSON/alert/view/alertsSummary/?apikey=$ZAP_TOKEN&baseurl=$APP_URL" | jq -r '.alertsSummary.Medium')
+      - echo "high alerts are $high_alerts"
+  post_build:
+    commands:
+      - curl -s "$ZAP_URL/OTHER/core/other/jsonreport/?apikey=$ZAP_TOKEN" | jq . > zap-scan-results.json
+      - | 
+        jq "{ \"messageType\": \"CodeScanReport\", \"reportType\": \"OWASP-Zap\", \
+        \"createdAt\": $(date +\"%Y-%m-%dT%H:%M:%S.%3NZ\"), \"source_repository\": env.CODEBUILD_SOURCE_REPO_URL_AppSource, \
+        \"source_branch\": env.CODEBUILD_SOURCE_VERSION_AppSource, \
+        \"build_id\": env.CODEBUILD_BUILD_ID, \
+        \"source_commitid\": env.CODEBUILD_RESOLVED_SOURCE_VERSION, \
+        \"report\": . }" zap-scan-results.json > payload.json
+      - aws lambda invoke --function-name $LAMBDA_SECHUB_NAME --cli-binary-format raw-in-base64-out --payload file://payload.json owaspzap_scan_report.json && echo "LAMBDA_SUCCEDED" || echo "LAMBDA_FAILED";
+      - if [ $high_alerts -gt 0 ]; then echo "there are high or medium alerts.. failing the build" && exit 1; else exit 0; fi
+
+artifacts:
+  files: '**/*'

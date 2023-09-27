@@ -1,0 +1,22 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo Installing Helm
+      # - curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+      - chmod 700 get_helm.sh
+      - ./get_helm.sh --version v3.12.3
+      - helm template -s templates/deployment.yaml $CODEBUILD_SRC_DIR_HelmSource/app/ > app.yaml
+      - docker pull public.ecr.aws/rimaulana/kubesec:v2
+  build:
+    commands:
+      - echo "Build started on $(date)"
+      - echo "Scanning with kubesec..."  
+      - result=`docker run --rm -i public.ecr.aws/rimaulana/kubesec:v2 scan /dev/stdin < app.yaml`
+  post_build:
+    commands:
+      - echo "Lint Results:"
+      - echo $result | jq . 
+      - aws ssm put-parameter --name "codebuild-kubesec-results" --type "String" --value "$result" --overwrite
+      - echo Build completed on `date`
