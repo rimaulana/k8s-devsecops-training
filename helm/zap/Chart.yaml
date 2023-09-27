@@ -1,0 +1,9 @@
+apiVersion: v2
+name: zap
+description: ZAP Proxy helm chart https://www.zaproxy.org/
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+maintainers:
+- email: rimaulana@outlook.com
+  name: Rio

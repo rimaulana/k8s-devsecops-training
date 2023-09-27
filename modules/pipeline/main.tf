@@ -27,7 +27,7 @@ resource "aws_ssm_parameter" "zap_token" {
 resource "aws_ssm_parameter" "zap_url" {
   name  = "${var.name}-zap-url"
   type  = "SecureString"
-  value = "http://owaspzap.devsecops-training.com"
+  value = "http://zap.devsecops-training.com"
 }
 
 # CBKSEventRule
