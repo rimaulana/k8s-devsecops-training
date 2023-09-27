@@ -280,8 +280,6 @@ module "eks_blueprints_addons" {
             ingressClassName: "nginx"
             hosts:
             - name: "sonarqube.devsecops-training.com"
-          persistence:
-            enabled: true
         EOT
       ]
     }
@@ -293,7 +291,7 @@ module "eks_blueprints_addons" {
           controller:
             service:
               annotations:
-                service.beta.kubernetes.io/aws-load-balancer-scheme: "internal"
+                service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
                 service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
                 service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
                 service.beta.kubernetes.io/aws-load-balancer-type: "external"

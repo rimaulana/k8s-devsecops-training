@@ -1,27 +1,33 @@
 data "aws_caller_identity" "current" {}
 
+resource "aws_ssm_parameter" "sonar_project_key" {
+  name  = "${var.name}-sonar-project-key"
+  type  = "SecureString"
+  value = "sonar project key"
+}
+
 resource "aws_ssm_parameter" "sonar_token" {
   name  = "${var.name}-sonar-token"
   type  = "SecureString"
-  value = "sonar-initial-token"
+  value = "sonar token"
 }
 
 resource "aws_ssm_parameter" "sonar_url" {
   name  = "${var.name}-sonar-url"
   type  = "SecureString"
-  value = "sonar-initial-url"
+  value = "http://sonarqube.devsecops-training.com"
 }
 
 resource "aws_ssm_parameter" "zap_token" {
   name  = "${var.name}-zap-token"
   type  = "SecureString"
-  value = "zap-initial-token"
+  value = "zap token"
 }
 
 resource "aws_ssm_parameter" "zap_url" {
   name  = "${var.name}-zap-url"
   type  = "SecureString"
-  value = "zap-initial-url"
+  value = "http://owaspzap.devsecops-training.com"
 }
 
 # CBKSEventRule
@@ -444,6 +450,12 @@ resource "aws_codebuild_project" "codebuild_sonar_project" {
       name = "SONAR_URL"
       type = "PARAMETER_STORE"
       value = aws_ssm_parameter.sonar_url.name
+    }
+    
+    environment_variable {
+      name = "SONAR_PROJECT_KEY"
+      type = "PARAMETER_STORE"
+      value = aws_ssm_parameter.sonar_project_key.name
     }
     
   }
@@ -1103,6 +1115,7 @@ resource "aws_lambda_function" "lambda_cbpu" {
     variables = {
       PREFIX = var.name
       CODEBUILDPUPROJECT = aws_codebuild_project.codebuild_publish_project.name
+      IMAGEREPONAME = var.prod_image_repo_name
     }
   }
   role = aws_iam_role.lambda_pr_comment_role.arn

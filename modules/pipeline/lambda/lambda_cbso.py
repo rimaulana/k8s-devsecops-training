@@ -28,14 +28,18 @@ def handler(event, context):
   destination_commit = ssm.get_parameter(
     Name='destinationCommit'
   )
+  
+  sonar_project_link = ssm.get_parameter(
+    Name='codebuild-sonar-link'
+  )
 
   s3_prefix = 's3-{0}'.format(event['region']) if event['region'] != 'us-east-1' else 's3'
   if event['detail']['project-name'] in [puproject]:
     errors = '## Code Quality Scanning (using SonarQube)\n'
     if event['detail']['build-status'] == 'SUCCEEDED':
-      errors = errors + 'Code quality passed Sonar quality gate.'
+      errors = errors + 'Code quality PASSED Sonar quality gate. Review the status at [project dashboard](%s).' % sonar_project_link['Parameter']['Value']
     else:
-      errors = errors + 'Code quality failed Sonar quality gate..  Please review the logs'
+      errors = errors + 'Code quality FAILED Sonar quality gate. Review the status at [project dashboard](%s).' % sonar_project_link['Parameter']['Value']
     for phase in event['detail']['additional-information']['phases']:
       if phase.get('phase-status') == 'FAILED':
           badge = 'https://{0}.amazonaws.com/sa-security-specialist-workshops-{1}/devsecops/containers/badges/failing.svg'.format(s3_prefix, event['region'])
@@ -53,4 +57,11 @@ def handler(event, context):
     beforeCommitId = source_commit['Parameter']['Value'],
     afterCommitId = destination_commit['Parameter']['Value'],
     content = content
+  )
+
+  # Delete pipeline parameters
+  ssm.delete_parameters(
+    Names=[
+        'codebuild-sonar-link'
+    ]
   )
