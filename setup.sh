@@ -22,3 +22,6 @@ sudo ln -s /opt/kubectx/kubectx /usr/local/bin/kctx
 sudo ln -s /opt/kubectx/kubens /usr/local/bin/kns
 
 source /home/ec2-user/.bashrc
+
+echo "Creating EC2 Spot service role"
+aws iam create-service-linked-role --aws-service-name spot.amazonaws.com

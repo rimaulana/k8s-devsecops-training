@@ -253,7 +253,16 @@ module "eks_blueprints_addons" {
   enable_karpenter = true
 
   enable_metrics_server = true
+  
   enable_external_dns   = true
+  external_dns = {
+    values = [
+        <<-EOT
+          policy: sync
+        EOT
+      ]
+  }
+  
   helm_releases = {
     sonarqube = {
       description      = "A Helm chart for sonarqube"
