@@ -1,0 +1,28 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-webapp
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: webapp
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: webapp
+        release: {{ .Release.Name }}
+        rev: !!string {{ .Release.Revision }}
+    spec:
+      containers:
+      - name: webapp
+        image: {{ .Values.image.repository}}:{{ .Values.image.tag }}
+        ports:
+        - containerPort: 5000
+          name: web
+        resources:
+          requests:
+            memory: 4Gi
+            cpu: 2

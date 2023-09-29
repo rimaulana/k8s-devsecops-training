@@ -1,0 +1,22 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: zap
+  labels:
+    app: zap
+    release: {{ .Release.Name }}
+    rev: !!string {{ .Release.Revision }}
+spec:
+  ingressClassName: {{ .Values.ingress.class }}
+  rules:
+    - host: zap.{{ .Values.ingress.domain }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: zap
+                port:
+                  number: 80

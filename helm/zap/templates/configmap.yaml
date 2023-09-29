@@ -1,0 +1,125 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zap-exec
+  labels:
+    app: zap
+    release: {{ .Release.Name }}
+    rev: !!string {{ .Release.Revision }}
+data:
+  zap-exec.sh: |
+    #!/bin/bash
+    /zap/zap.sh -daemon -host $HOST -port $PORT -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true -config api.key=$API_KEY
+
+---
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: zap-api-key
+  labels:
+    app: zap
+    release: {{ .Release.Name }}
+    rev: !!string {{ .Release.Revision }}
+data:
+  api_key: d29ya3Nob3B6YXBrZXk=
+  
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: httpd
+  labels:
+    app: zap
+    release: {{ .Release.Name }}
+    rev: !!string {{ .Release.Revision }}
+data:
+  httpd.conf: |
+    ServerRoot "/usr/local/apache2"
+    
+    Listen 80
+    <VirtualHost *:80>
+        ProxyPass / http://localhost:8085/
+        ProxyPassReverse / http://localhost:8085/
+    </VirtualHost>
+    
+    # Include conf.modules.d/*.conf
+    # IncludeOptional conf.d/*.conf
+    LoadModule mpm_event_module modules/mod_mpm_event.so
+    LoadModule proxy_module modules/mod_proxy.so
+    # LoadModule proxy_balancer_module modules/mod_proxy_balancer.so
+    LoadModule proxy_http_module modules/mod_proxy_http.so
+    LoadModule proxy_http2_module modules/mod_proxy_http2.so
+    LoadModule unixd_module modules/mod_unixd.so
+    LoadModule authz_core_module modules/mod_authz_core.so
+    LoadModule log_config_module modules/mod_log_config.so
+    LoadModule logio_module modules/mod_logio.so
+    
+    User www-data
+    Group www-data
+    
+    <Directory />
+        AllowOverride none
+        Require all denied
+    </Directory>
+    
+    DocumentRoot "/usr/local/apache2/htdocs"
+    <Directory "/usr/local/apache2/htdocs">
+        AllowOverride None
+        Require all granted
+    </Directory>
+    
+    
+    <IfModule dir_module>
+        DirectoryIndex index.html
+    </IfModule>
+    
+    
+    <Files ".ht*">
+        Require all denied
+    </Files>
+    
+    
+    ErrorLog /proc/self/fd/2
+    
+    
+    LogLevel warn
+    
+    <IfModule log_config_module>
+        
+        LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" combined
+        LogFormat "%h %l %u %t \"%r\" %>s %b" common
+    
+        <IfModule logio_module>
+          # You need to enable mod_logio.c to use %I and %O
+          LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\" %I %O" combinedio
+        </IfModule>
+    
+        CustomLog /proc/self/fd/1 common
+    
+    </IfModule>
+    
+    <IfModule alias_module>
+        ScriptAlias /cgi-bin/ "/usr/local/apache2/cgi-bin/"
+    </IfModule>
+    
+    <Directory "/usr/local/apache2/cgi-bin">
+        AllowOverride None
+        Options None
+        Require all granted
+    </Directory>
+    
+    <IfModule mime_module>
+        TypesConfig /etc/mime.types
+        AddType application/x-compress .Z
+        AddType application/x-gzip .gz .tgz
+        AddType text/html .shtml
+        AddOutputFilter INCLUDES .shtml
+    </IfModule>
+    
+    AddDefaultCharset UTF-8
+    
+    <IfModule mod_http2.c>
+        Protocols h2 h2c http/1.1
+    </IfModule>
