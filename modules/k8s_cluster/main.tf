@@ -1,8 +1,3 @@
-provider "aws" {
-  region = "us-east-1"
-  alias  = "virginia"
-}
-
 provider "kubernetes" {
   host                   = module.eks.cluster_endpoint
   cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
@@ -41,10 +36,6 @@ provider "kubectl" {
     # This requires the awscli to be installed locally where Terraform is executed
     args = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
   }
-}
-
-data "aws_ecrpublic_authorization_token" "token" {
-  provider = aws.virginia
 }
 
 locals {
@@ -239,12 +230,18 @@ module "eks_blueprints_addons" {
   }
   
   enable_karpenter = true
-  karpenter = {
-    repository_username = data.aws_ecrpublic_authorization_token.token.user_name
-    repository_password = data.aws_ecrpublic_authorization_token.token.password
-  }
+
   enable_metrics_server = true
+  
   enable_external_dns   = true
+  external_dns = {
+    values = [
+        <<-EOT
+          policy: sync
+        EOT
+      ]
+  }
+  
   helm_releases = {
     sonarqube = {
       description      = "A Helm chart for sonarqube"
@@ -271,7 +268,7 @@ module "eks_blueprints_addons" {
           controller:
             service:
               annotations:
-                service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+                service.beta.kubernetes.io/aws-load-balancer-scheme: "internal"
                 service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
                 service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
         EOT
