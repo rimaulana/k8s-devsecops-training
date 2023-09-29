@@ -1,0 +1,19 @@
+replicaCount: 2
+
+zap:
+  image:
+    repository: ghcr.io/zaproxy/zaproxy
+    tag: stable
+
+apache:
+  image:
+    repository: httpd
+    tag: 2.4
+    
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  class: nginx
+  domain: devsecops-training.com

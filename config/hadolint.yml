@@ -1,0 +1,6 @@
+ignored: 
+- DL3000 
+- DL3025 
+
+trustedRegistries: 
+- public.ecr.aws
