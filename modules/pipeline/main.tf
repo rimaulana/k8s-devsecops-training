@@ -308,11 +308,6 @@ resource "aws_codebuild_project" "codebuild_vuln_project" {
       value = var.scratch_image_repo_name
     }
     
-    environment_variable {
-      name  = "FUNCTION_ARN"
-      value = var.lambda_security_hub_arn
-    }
-    
   }
   artifacts {
     type = "CODEPIPELINE"
