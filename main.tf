@@ -120,6 +120,5 @@ module pipeline {
   prod_image_repo_name      = aws_ecr_repository.prd_ecr_repository.name
   scratch_image_repo_name   = aws_ecr_repository.scratch_ecr_repository.name
   vulnerability_intolerance = "HIGH"
-  lambda_security_hub_arn   = aws_ecr_repository.prd_ecr_repository.arn
   tags                      = local.tags
 }

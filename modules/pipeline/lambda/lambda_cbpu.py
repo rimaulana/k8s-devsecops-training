@@ -6,6 +6,7 @@ import json
 codecommit_client = boto3.client('codecommit')
 ssm = boto3.client('ssm')
 puproject = os.environ['CODEBUILDPUPROJECT']
+image_repo_name = os.environ['IMAGEREPONAME']
 
 def handler(event, context):
 
@@ -30,11 +31,11 @@ def handler(event, context):
   )
 
   s3_prefix = 's3-{0}'.format(event['region']) if event['region'] != 'us-east-1' else 's3'
-  sec_hub = 'https://%s.console.aws.amazon.com/securityhub/' % event['region'] 
+  ecr_url = 'https://{0}.console.aws.amazon.com/ecr/repositories/{1}/'.format(event['region'], image_repo_name) 
   if event['detail']['project-name'] in [puproject]:
     errors = '## Image Build and Push\n'
     if event['detail']['build-status'] == 'SUCCEEDED':
-      errors = errors + 'Image has successfully been published to the [AWS ECR repository](https://us-east-2.console.aws.amazon.com/ecr/repositories/container-devsecops-wksp-sample/).  The Pull Request has been merged and closed.'
+      errors = errors + 'Image has successfully been published to the [AWS ECR repository](%s).  The Pull Request has been merged and closed.' % ecr_url
     else:
       errors = errors + 'Image has failed to build.  Please review the logs'
     for phase in event['detail']['additional-information']['phases']:
