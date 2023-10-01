@@ -233,3 +233,124 @@ aws codecommit create-pull-request \
     --targets repositoryName=k8s-devsecops-training-app,sourceReference=dev,destinationReference=main \
     --region us-east-1
 ```
+OR
+1. Open [app repository pull request](https://us-east-1.console.aws.amazon.com/codesuite/codecommit/repositories/k8s-devsecops-training-app/pull-requests?region=us-east-1)
+2. Click **Create pull request**
+3. Destination is **main** and Source is **dev**, then click **Compare**
+4. Give Title and Description then click **Create pull request**
+
+### Fix Dockerfile linting issues
+1. Since under **hadolint.yml** we only allow image to be from **public.ecr.aws**  under trusted registry, we cannot image from other repository, by default if we did not define specific repo, it will be pulled from docker hub
+2. To adhere the principals of least privileges, your containers should not be running as root. Most containerized processes are application services and therefore don’t require root access.
+3. Latest is just a tag you add to an image and is no way dynamic. It can be overwritten and prove difficult to understand what version of the software is installed. Using the latest tag can effect the availability of your application and you should look at using a more explicit tag.
+4. Fix your Dockerfile to looks like the following
+```Dockerfile
+FROM public.ecr.aws/docker/library/python:3.7-alpine
+
+LABEL maintainer="Sasquatch"
+RUN adduser sasquatch -D
+
+COPY . /app
+
+WORKDIR /app
+RUN pip install -r requirements.txt
+
+ENV APACHE_RUN_USER www-data
+ENV APACHE_RUN_GROUP www-data
+ENV APACHE_LOG_DIR /var/log/apache2
+
+EXPOSE 5000
+
+USER sasquatch
+
+CMD python ./index.py
+```
+
+Once changes are made, you will need to push this new changes into remote repository
+```bash
+cd ~/environment/k8s-devsecops-training-app/
+git add Dockerfile
+git commit -m "Fixed Dockerfile linting issues."
+git push -u origin dev
+```
+New commit into the dev branch while having an open pull request will trigger the execution of your pipeline
+
+### Remove secrets
+Remove secrets that is accidentally added in app index.py, the commit the change into your code repo
+```bash
+cd ~/environment/k8s-devsecops-training-app/
+git add Dockerfile
+git commit -m "Removed secrets from index.py"
+git push -u origin dev
+```
+You may notice that the pipeline still failed on secrets stage,  If you look at the commit that's being scanned you'll see that the access key still exists in that commit because it is part of the diff. Make one more commit and you'll see that your build passes the secret scanning stage successfully.
+
+### Improve Pipeline
+You notice that the pipeline took long since it is going in a serial manner. However, both Dockerfile linting and Secrets Scanning can go in paraller. To modify your pipeline, switch to stage1-complete branch
+```bash
+cd ~/environment/k8s-devsecops-training/
+git checkout stage1-complete
+terraform apply
+```
+
+## Module-05: Creating Kubernetes Cluster and the rest of the Pipeline
+### Swithing to stage2 and apply terraform
+```bash
+cd ~/environment/k8s-devsecops-training/
+git checkout stage2
+terraform apply
+```
+
+### Updating kubeconfig
+```bash
+aws eks update-kubeconfig --name k8s-devsecops-training --region us-east-1
+```
+
+### Fixing external-dns
+Once you have access to the cluster, make sure to restart exernal-dns pod for it to be able to use IAM Role for Service Account
+```bash
+kubectl delete pod -n external-dns -l app.kubernetes.io/name=external-dns
+```
+
+### Deploy ZAP
+ZAP proxy will be deployed as a pod on your kubernetes cluster, we will use helm to deploy ZAP
+```bash
+cd ~/environment/k8s-devsecops-training/helm/
+helm upgrade -i zapproxy -n zap --create-namespace zap/
+```
+
+### Configure SonarQube
+This step only works on Chrome, You will need to create a project on SonarQube, since all application are exposed via internal load balancer you will need to access them via port-forward
+```bash
+kubectl port-forward -n sonarqube sonarqube-sonarqube-0 8080:9000
+```
+On Cloud9 on the top bar, click on **Preview** then **Preview Running Application**. It will give you a blank page, then pick **Pop Out Into New Window** on the right corner of the new blank page
+
+The default username and password for SonarQube is **admin** you will be asked to change this password. Once you are in SonarQube
+1. Go to top right on click on **A** symbol then **My Account**
+2. Go to **Security** tab
+3. Generate new Global Analysis Token
+4. Copy the token
+5. Open file ~/k8s-devsecops-training/modules/pipeline/main.tf
+6. Put the token as the value of **resource "aws_ssm_parameter" "sonar_token"**
+7. On the left top of the page click on **Projects** then **Create project manually**
+8. Put in **flask-app** as the name of the project then **next**
+9. Select **Use the global setting** then **Create project**
+10. Select **Locally**
+11. Select **Use existing token** then past the global analysis token created on step 3. Click **Continue**
+12. On the right click on **Project Settings** then **General Settings**
+13. Go to **SCM** tab and slide **Disable the SCM Sensor**
+14. Open file ~/k8s-devsecops-training/modules/pipeline/main.tf
+15. Put **flask-app** as the value of **resource "aws_ssm_parameter" "sonar_project_key"**
+16. Save the file
+
+### Configure ZAP token
+1. Open file ~/k8s-devsecops-training/modules/pipeline/main.tf
+2. The value for **resource "aws_ssm_parameter" "zap_token"** will be given
+3. Save the file
+
+### Updating the Infrastructure
+```bash
+cd ~/environment/k8s-devsecops-training/
+terraform apply
+```
