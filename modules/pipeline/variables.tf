@@ -64,11 +64,6 @@ variable vulnerability_intolerance {
   # - CRITICAL
 }
 
-variable lambda_security_hub_arn {
-  type        = string
-  description = "The ARN of Lambda Function to push security finding to SecurityHub"
-}
-
 variable tags {
   description = "Tags to be attached to the cluster"
   type        = map(any)

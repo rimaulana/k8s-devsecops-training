@@ -7,5 +7,8 @@ terraform {
       version = ">= 4.47"
     }
   }
-
+  
+  backend "local" {
+    path = "/home/ec2-user/environment/terraform.tfstate"
+  }
 }
