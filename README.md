@@ -331,7 +331,7 @@ The default username and password for SonarQube is **admin** you will be asked t
 2. Go to **Security** tab
 3. Generate new Global Analysis Token
 4. Copy the token
-5. Open file ~/k8s-devsecops-training/modules/pipeline/main.tf
+5. Open file ~/environment/k8s-devsecops-training/modules/pipeline/main.tf
 6. Put the token as the value of **resource "aws_ssm_parameter" "sonar_token"**
 7. On the left top of the page click on **Projects** then **Create project manually**
 8. Put in **flask-app** as the name of the project then **next**
@@ -340,12 +340,12 @@ The default username and password for SonarQube is **admin** you will be asked t
 11. Select **Use existing token** then past the global analysis token created on step 3. Click **Continue**
 12. On the right click on **Project Settings** then **General Settings**
 13. Go to **SCM** tab and slide **Disable the SCM Sensor**
-14. Open file ~/k8s-devsecops-training/modules/pipeline/main.tf
+14. Open file ~/environment/k8s-devsecops-training/modules/pipeline/main.tf
 15. Put **flask-app** as the value of **resource "aws_ssm_parameter" "sonar_project_key"**
 16. Save the file
 
 ### Configure ZAP token
-1. Open file ~/k8s-devsecops-training/modules/pipeline/main.tf
+1. Open file ~/environment/k8s-devsecops-training/modules/pipeline/main.tf
 2. The value for **resource "aws_ssm_parameter" "zap_token"** will be given
 3. Save the file
 
