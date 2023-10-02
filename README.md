@@ -664,7 +664,7 @@ gunicorn -w $WORKER -b $ADDR_BIND:$APP_PORT --access-logfile=- 'index:app'
 You can use docker to get a testing environment ready
 ```bash
 cd ~/environment/k8s-devsecops-training-app
-docker run -it --rm -p 8080:5000 -v $(pwd):/code public.ecr.aws/docker/library/python:3.7.9-alpine sh
+docker run -it --rm -p 5000:5000 -v $(pwd):/code public.ecr.aws/docker/library/python:3.7.9-alpine sh
 cd code
 pip install -r requirements.txt
 pip install coverage
