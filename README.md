@@ -761,8 +761,8 @@ kubectl delete namespace zap
 kubectl delete namespace ingress-nginx
 ```
 ### Delete images from ECR repos
-scratch-k8s-devsecops-training
-prod-k8s-devsecops-training
+- scratch-k8s-devsecops-training
+- prod-k8s-devsecops-training
 
 ### Clean up S3 bucket ```k8s-devsecops-training-<account_id>-<region>-artifacts```
 ### Delete AWS resources via Terraform
